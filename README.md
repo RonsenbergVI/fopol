@@ -1,0 +1,2 @@
+# fopol
+FPL + Bayesian stats.
