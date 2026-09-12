@@ -1,0 +1,27 @@
+name: release-please
+
+# Keeps the release PR open on main and, when it is merged, writes the tag and
+# the GitHub release. Publishing is release.yaml's job, triggered by that tag.
+#
+# A tag pushed with the default GITHUB_TOKEN does not trigger other workflows,
+# so this runs with RELEASE_PLEASE_TOKEN (a fine-grained PAT with contents and
+# pull-requests write) when the secret is set; without it the tag lands but
+# release.yaml has to be started by hand via workflow_dispatch.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

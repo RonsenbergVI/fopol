@@ -1,0 +1,63 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fopol"
+version = "0.1.0"
+description = "Bayesian models of Fantasy Premier League, built on NumPyro"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "RJ" }]
+keywords = ["fantasy-premier-league", "bayesian", "numpyro", "football"]
+
+dependencies = [
+    "numpyro>=0.21.0",
+    "jax>=0.6",
+    "numpy>=2.0",
+    "pandas>=2.2",
+    "httpx>=0.27",
+    "pulp>=2.8",
+    "pydantic>=2.7",
+]
+
+[project.optional-dependencies]
+diagnostics = ["arviz>=0.20", "matplotlib>=3.8"]
+dev = ["pytest>=8.0", "ruff>=0.14", "ty>=0.0.60", "pre-commit>=4.0"]
+docs = ["mkdocs-material>=9.5", "mkdocstrings[python]>=0.26"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["fopol"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Library and example code document contracts, not every accessor; the suite
+# is held to "every test has a docstring" and so keeps the D1xx checks.
+"fopol/**" = ["D1"]
+"examples/**" = ["D1"]
+# Source fixtures are verbatim feed text, and a CSV header row is as long as the feed made it.
+"tests/conftest.py" = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["*_test.py"]
+# The suite mirrors the package, so a basename can recur across subpackages
+# (data/team.py and models/team.py would both map to team_test.py); importlib
+# mode is what lets pytest tell them apart.
+addopts = "--import-mode=importlib"
+markers = [
+    "integration: leaves the machine (FPL API, the archive mirror, Understat); excluded from the unit run",
+]
+
+[tool.ty.src]
+include = ["fopol", "tests"]

@@ -1,0 +1,81 @@
+name: pull-request
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  conventions:
+    name: branch name and title
+    runs-on: ubuntu-latest
+    steps:
+      - name: branch name is type/short-description
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)/[a-z0-9]+([.-][a-z0-9]+)*$'
+          if [[ ! "$BRANCH" =~ $pattern ]]; then
+            echo "::error::branch '$BRANCH' must match $pattern"
+            exit 1
+          fi
+      - name: title is a conventional commit
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pattern='^(feat|fix|docs|refactor|perf|test|build|ci|chore|deps|revert)(\([a-z0-9._-]+\))?!?: [a-z0-9].{1,58}[^. ]$'
+          if [[ ! "$TITLE" =~ $pattern ]]; then
+            echo "::error::title '$TITLE' must be 'type(scope): subject' with a lowercase subject of 3-60 characters and no trailing period"
+            exit 1
+          fi
+
+  pre-commit:
+    name: pre-commit (ruff, ty, hygiene)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --all-extras
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+      - run: uv run pre-commit run --all-files --show-diff-on-failure
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --all-extras
+      - run: uv run mkdocs build --strict
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python }}
+      - run: uv sync --all-extras
+      - run: uv run pytest -m "not integration"
+
+  build:
+    name: wheel and sdist build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv build
+      - run: uv run --isolated --no-project --with dist/*.whl python -c "import fopol; print(fopol.__version__)"

@@ -1,0 +1,71 @@
+name: release
+
+# Fires on a version tag. release-please cuts that tag and the GitHub release
+# when the release PR is merged (see release-please.yaml), so the normal path
+# is: merge release PR -> tag v* -> this workflow builds and publishes to PyPI.
+# `workflow_dispatch` re-runs it for an existing tag.
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to release, e.g. v0.5.0"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: astral-sh/setup-uv@v6
+      - name: tag matches the package version
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          version=$(uv version --short)
+          if [[ "$TAG" != "v$version" ]]; then
+            echo "::error::tag $TAG does not match pyproject version $version"
+            exit 1
+          fi
+      - run: uv build
+      - run: uv run --isolated --no-project --with dist/*.whl python -c "import fopol; print(fopol.__version__)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --all-extras
+      - run: uv run pytest -m "not integration"
+
+  publish:
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/fopol/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+

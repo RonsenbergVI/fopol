@@ -1,0 +1,63 @@
+site_name: fopol
+site_description: Bayesian models of Fantasy Premier League, built on NumPyro
+repo_url: https://github.com/RonsenbergVI/fopol
+strict: true
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.suggest
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: false
+            show_root_heading: true
+            members_order: source
+            separate_signature: true
+            show_signature_annotations: true
+
+markdown_extensions:
+  - admonition
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - toc:
+      permalink: true
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+
+nav:
+  - Home: index.md
+  - API:
+      - Base: api/base.md
+      - Data: api/data.md
+      - Sources: api/sources.md
+      - Models:
+          - Team: api/models/team.md
+          - Minutes: api/models/minutes.md
+          - Involvement: api/models/involvement.md
+          - Points: api/models/points.md
+      - Identity: api/identity.md
+      - Constants: api/constants.md
