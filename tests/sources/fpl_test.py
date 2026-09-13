@@ -9,7 +9,7 @@ from fopol.base.data import Position
 from fopol.base.source import Kind
 from fopol.data.player import PlayerStat
 from fopol.data.result import Result
-from fopol.sources.fpl import FPLApiSource, FPLArchiveSource
+from fopol.sources.fpl import FPLApiSource, FPLArchiveSource, FPLMirrorSource
 
 
 def test_archive_seasons_span_first_to_last_inclusive():
@@ -182,6 +182,61 @@ def test_api_skips_a_player_whose_summary_is_missing(get, get_many, api_pages):
     assert [r.player_name for r in FPLApiSource().appearances("2025-26")] == ["Bukayo Saka"]
 
 
+@patch("fopol.sources.fpl.cached_get")
+def test_mirror_results_come_from_the_dumped_fixtures(get, mirror_pages, mirror_url):
+    """The mirror's fixtures file is the API's, so results parse exactly like the API's."""
+    get.side_effect = lambda url, **_: mirror_pages.get(url)
+
+    results = FPLMirrorSource().results("2025-26")
+
+    assert results.source == "fpl-mirror"
+    assert [(str(r.home), str(r.away), r.played) for r in results] == [
+        ("arsenal", "man-city", True),
+        ("man-city", "arsenal", False),
+    ]
+    get.assert_any_call(f"{mirror_url}/2025/fpl-fixtures_2025.json", refresh=True)
+
+
+@patch("fopol.sources.fpl.cached_get")
+def test_mirror_appearances_join_live_rows_to_element_and_fixture(get, mirror_pages):
+    """``live.csv`` has no name, club or fixture; those come from bootstrap and the fixture list."""
+    get.side_effect = lambda url, **_: mirror_pages.get(url)
+
+    rows = FPLMirrorSource().appearances("2025-26")
+
+    assert [r.player_name for r in rows] == ["Bukayo Saka", "Gone Player"]
+    saka, gone = rows
+    assert (str(saka.team), str(saka.opponent), saka.is_home, saka.fixture_id) == (
+        "arsenal",
+        "man-city",
+        True,
+        "1",
+    )
+    assert saka.gameweek == 1 and saka.kickoff == pd.Timestamp("2025-08-16T19:00:00Z")
+    assert (saka.minutes, saka.goals, saka.assists, saka.total_points) == (77, 1, 1, 13)
+    assert saka.price == pytest.approx(10.2) and saka.ownership == pytest.approx(45.2)
+    assert saka.xg is None
+    assert (str(gone.team), gone.is_home, gone.minutes) == ("man-city", False, 0)
+
+
+@patch("fopol.sources.fpl.cached_get")
+def test_mirror_bootstrap_is_read_once_per_season(get, mirror_pages, mirror_url):
+    """Results and appearances share one bootstrap fetch.
+
+    It is refreshed rather than served from the cache, since the mirror moves.
+    """
+    get.side_effect = lambda url, **_: mirror_pages.get(url)
+    source = FPLMirrorSource()
+
+    source.results("2025-26")
+    source.appearances("2025-26")
+
+    bootstrap_calls = [
+        c for c in get.call_args_list if c.args[0] == f"{mirror_url}/2025/fpl-bootstrap_2025.json"
+    ]
+    assert len(bootstrap_calls) == 1 and bootstrap_calls[0].kwargs == {"refresh": True}
+
+
 @pytest.mark.integration
 def test_archive_serves_a_full_season(season):
     """A finished season is 380 fixtures over 20 clubs, and every club's players appear."""
@@ -217,6 +272,22 @@ def test_archive_appearances_agree_with_results_on_the_scoreline(season):
     ]
     # Own goals are credited to no scorer, so a handful of fixtures legitimately differ.
     assert len(mismatches) < 40
+
+
+@pytest.mark.integration
+def test_mirror_serves_the_season_in_progress():
+    """The mirror carries every fixture of the season and appearances for the played gameweeks."""
+    source = FPLMirrorSource()
+
+    season = source.seasons()[-1]
+    results = source.results(season)
+    appearances = source.appearances(season)
+
+    assert len(results) == 380
+    assert len({str(r.home) for r in results}) == 20
+    played_gws = {r.gameweek for r in results if r.played}
+    assert {r.gameweek for r in appearances} <= played_gws
+    assert appearances.record_type is source.provides[Kind.APPEARANCES]
 
 
 @pytest.mark.integration

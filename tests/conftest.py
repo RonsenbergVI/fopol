@@ -202,6 +202,64 @@ def _involvement_rows(name, position, goals, assists, games, minutes=90):
 
 
 @pytest.fixture(scope="session")
+def share_row() -> Callable[..., PlayerStat]:
+    """Builder for one unplayed row: ``share_row(name, position, penalties_order=None, ...)``."""
+
+    def build(name: str, position: str, **fields) -> PlayerStat:
+        return PlayerStat(
+            season="2024-25",
+            fixture_id="x",
+            player=PlayerRef(id=name),
+            player_name=name,
+            team=TeamRef(id="anytown"),
+            opponent=TeamRef(id="elsewhere"),
+            position=position,
+            is_home=True,
+            kickoff=pd.Timestamp("2025-01-01", tz="UTC"),
+            **fields,
+        )
+
+    return build
+
+
+def _share_rows(name, team, position, goals_per_game, games, **fields):
+    return [
+        PlayerStat(
+            season="2024-25",
+            fixture_id=f"{team}-{g}",
+            player=PlayerRef(id=name),
+            player_name=name,
+            team=TeamRef(id=team),
+            opponent=TeamRef(id="elsewhere"),
+            position=position,
+            is_home=True,
+            kickoff=pd.Timestamp("2024-08-01", tz="UTC") + pd.Timedelta(days=7 * g),
+            minutes=90,
+            goals=goals_per_game,
+            **fields,
+        )
+        for g in range(games)
+    ]
+
+
+@pytest.fixture(scope="session")
+def share_history() -> Dataset[PlayerStat]:
+    """Two clubs over 30 fixtures: a low-scoring one carried by its talisman, a big one that spreads goals.
+
+    ``lowtown`` scores one a game and the talisman gets it every time; ``bigcity``
+    scores three a game shared by three players. ``blank-taker`` is a first-choice
+    penalty taker at bigcity who never scores.
+    """
+    rows = _share_rows("talisman", "lowtown", "FWD", 1, 30) + _share_rows(
+        "lowtown-mid", "lowtown", "MID", 0, 30
+    )
+    for name in ("big-club-striker", "big-club-winger", "big-club-mid"):
+        rows += _share_rows(name, "bigcity", "FWD", 1, 30)
+    rows += _share_rows("blank-taker", "bigcity", "MID", 0, 30, penalties_order=1)
+    return Dataset(rows, record_type=PlayerStat)
+
+
+@pytest.fixture(scope="session")
 def involvement_history() -> Dataset[PlayerStat]:
     """Four players with very different output: a prolific, a blank and a lucky-sub forward, a playmaker."""
     rows = (
@@ -344,6 +402,7 @@ _BOOTSTRAP = {
             "team": 1,
             "element_type": 3,
             "selected_by_percent": "45.2",
+            "now_cost": 102,
         },
         {
             "id": 999,
@@ -352,6 +411,7 @@ _BOOTSTRAP = {
             "team": 13,
             "element_type": 4,
             "selected_by_percent": "0.1",
+            "now_cost": 45,
         },
     ],
 }
@@ -473,6 +533,37 @@ def api_pages(api_url: str) -> dict[str, str | None]:
         f"{api_url}/fixtures/": json.dumps(_API_FIXTURES),
         f"{api_url}/element-summary/401/": json.dumps(_SAKA_SUMMARY),
         f"{api_url}/element-summary/999/": None,
+    }
+
+
+_MIRROR = "https://raw.githubusercontent.com/TopMarx/fpl/main/data"
+
+_MIRROR_LIVE_CSV = """gw,fpl_id,minutes,starts,goals_scored,assists,clean_sheets,goals_conceded,own_goals,yellow_cards,red_cards,saves,bonus,bps,defensive_contribution,total_points
+1,401,77,1,1,1,0,2,0,0,0,0,3,41,4,13
+1,999,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+1,555,90,1,0,0,0,0,0,0,0,0,0,0,0,0
+"""
+
+
+@pytest.fixture(scope="session")
+def mirror_url() -> str:
+    """Root of the TopMarx/fpl mirror."""
+    return _MIRROR
+
+
+@pytest.fixture(scope="session")
+def mirror_pages(mirror_url: str) -> dict[str, str]:
+    """URL -> body for a one-gameweek mirror: the API bootstrap and fixtures plus ``live.csv``.
+
+    The CSV carries an unknown ``fpl_id`` (555) that must be skipped, and the
+    fixtures are the live-API ones, so a row is joined to its fixture by club
+    and gameweek.
+    """
+    root = f"{mirror_url}/2025"
+    return {
+        f"{root}/fpl-bootstrap_2025.json": json.dumps(_BOOTSTRAP),
+        f"{root}/fpl-fixtures_2025.json": json.dumps(_API_FIXTURES),
+        f"{root}/csv/live.csv": _MIRROR_LIVE_CSV,
     }
 
 

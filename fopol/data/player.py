@@ -54,6 +54,13 @@ class PlayerSeason(Data):
     total_points: Annotated[int, Agg.SUM] = 0
     price: Annotated[float | None, Agg.LAST] = None
     ownership: Annotated[float | None, Agg.LAST] = None
+    influence: Annotated[float | None, Agg.SUM] = None
+    creativity: Annotated[float | None, Agg.SUM] = None
+    threat: Annotated[float | None, Agg.SUM] = None
+    penalties_order: Annotated[int | None, Agg.LAST] = None
+    """Rank in the club's penalty-taking order (1 = first choice); ``None`` if not a taker."""
+    direct_freekicks_order: Annotated[int | None, Agg.LAST] = None
+    corners_order: Annotated[int | None, Agg.LAST] = None
 
     def per90(self, field: str) -> float:
         """Total over exposure -- the only correct way to form a rate."""
@@ -112,6 +119,13 @@ class PlayerStat(Data):
     total_points: Annotated[int, Agg.SUM] = 0
     price: Annotated[float | None, Agg.LAST] = None
     ownership: Annotated[float | None, Agg.LAST] = None
+    influence: Annotated[float | None, Agg.SUM] = None
+    creativity: Annotated[float | None, Agg.SUM] = None
+    threat: Annotated[float | None, Agg.SUM] = None
+    penalties_order: Annotated[int | None, Agg.LAST] = None
+    """Rank in the club's penalty-taking order (1 = first choice); ``None`` if not a taker."""
+    direct_freekicks_order: Annotated[int | None, Agg.LAST] = None
+    corners_order: Annotated[int | None, Agg.LAST] = None
 
     @property
     def played(self) -> bool:

@@ -61,6 +61,19 @@ class DixonColesTeamModel(TeamModel):
         prior_home_advantage: Prior mean of the log home-advantage term.
         teams: Fixed team ordering, optionally a superset of the teams seen,
             so a club with no results yet is drawn from the population prior.
+        promoted: Clubs new to the league this season. A club with no history
+            would otherwise be drawn as league-average; promoted sides are not,
+            so they share a shift on attack and defence with prior mean
+            ``prior_promoted`` and scale 0.15, learned from whatever results
+            they have. Ignored for clubs with a full season behind them.
+        prior_promoted: Prior mean of that (attack, defence) shift on the log
+            scale; the default is roughly what promoted sides have averaged
+            against the league -- about 25% fewer goals scored, 20% more conceded.
+        population_df: Degrees of freedom of a Student-t population
+            distribution for club effects; ``None`` is Gaussian. Heavy tails let
+            the best and worst clubs sit further from the pack than a Gaussian
+            population allows -- Baio and Blangiardo's over-shrinkage problem --
+            while the pack is pooled as before. Must exceed 2.
         inference: Sampler settings.
     """
 
@@ -71,6 +84,9 @@ class DixonColesTeamModel(TeamModel):
         dixon_coles: bool = True,
         prior_home_advantage: float = 0.25,
         teams: list[str] | None = None,
+        promoted: list[str] | None = None,
+        prior_promoted: tuple[float, float] = (-0.25, -0.2),
+        population_df: float | None = None,
         inference: Inference | None = None,
     ) -> None:
         if half_life_days is not None and half_life_days <= 0:
@@ -79,11 +95,18 @@ class DixonColesTeamModel(TeamModel):
         self.dixon_coles = dixon_coles
         self.prior_home_advantage = prior_home_advantage
         self.teams = teams
+        self.promoted = promoted
+        self.prior_promoted = prior_promoted
+        if population_df is not None and population_df <= 2:
+            raise ValueError("population_df must exceed 2 (finite variance) or be None")
+        self.population_df = population_df
         self.inference = inference or Inference()
 
     # ------------------------------------------------------------- numpyro
 
-    def _numpyro_model(self, home_idx, away_idx, home_goals, away_goals, n_teams, weights):
+    def _numpyro_model(
+        self, home_idx, away_idx, home_goals, away_goals, n_teams, weights, promoted_mask
+    ):
         intercept = numpyro.sample("intercept", dist.Normal(0.0, 1.0))
         home_advantage = numpyro.sample(
             "home_advantage", dist.Normal(self.prior_home_advantage, 0.25)
@@ -93,8 +116,20 @@ class DixonColesTeamModel(TeamModel):
         scale_tril = sigma[:, None] * chol_corr
 
         with numpyro.plate("teams", n_teams):
-            z = jnp.asarray(numpyro.sample("z", dist.Normal(0.0, 1.0).expand([2]).to_event(1)))
+            base = (
+                dist.Normal(0.0, 1.0)
+                if self.population_df is None
+                else dist.StudentT(self.population_df, 0.0, 1.0)
+            )
+            z = jnp.asarray(numpyro.sample("z", base.expand([2]).to_event(1)))
         effects = z @ scale_tril.T
+        if promoted_mask is not None:
+            shift = jnp.asarray(
+                numpyro.sample(
+                    "promoted", dist.Normal(jnp.asarray(self.prior_promoted), 0.15).to_event(1)
+                )
+            )
+            effects = effects + promoted_mask[:, None] * shift
         attack = jnp.asarray(numpyro.deterministic("attack", effects[:, 0]))
         defence = jnp.asarray(numpyro.deterministic("defence", effects[:, 1]))
         numpyro.deterministic("attack_defence_corr", chol_corr[1, 0])
@@ -139,6 +174,15 @@ class DixonColesTeamModel(TeamModel):
             days = np.array([(k - latest).total_seconds() / 86400.0 for k in kickoffs])
             weights = jnp.asarray(np.exp(math.log(2.0) / self.half_life_days * days))
 
+        promoted_mask = None
+        if self.promoted:
+            unknown_promoted = sorted(set(map(str, self.promoted)) - lookup.keys())
+            if unknown_promoted:
+                raise ValueError(f"`promoted` names teams absent from `teams`: {unknown_promoted}")
+            promoted_mask = jnp.asarray(
+                np.array([t in set(map(str, self.promoted)) for t in teams], dtype=np.float32)
+            )
+
         inf = self.inference
         mcmc = MCMC(
             NUTS(self._numpyro_model, target_accept_prob=inf.target_accept_prob),
@@ -155,6 +199,7 @@ class DixonColesTeamModel(TeamModel):
             away_goals=jnp.asarray(ag),
             n_teams=len(teams),
             weights=weights,
+            promoted_mask=promoted_mask,
         )
         self.mcmc_ = mcmc
         self.posterior_ = {k: np.asarray(v) for k, v in mcmc.get_samples().items()}

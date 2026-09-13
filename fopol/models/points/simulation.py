@@ -21,6 +21,7 @@ import numpy as np
 
 from fopol.base.dataset import Dataset
 from fopol.base.model import Inference, InvolvementModel, MinutesModel, PointsModel, TeamModel
+from fopol.constants import LEAGUE_AVERAGE_GOALS
 from fopol.data.player import PlayerStat
 
 __all__ = ["SimulatedPointsModel"]
@@ -28,7 +29,6 @@ __all__ = ["SimulatedPointsModel"]
 GOAL_POINTS = {"GK": 6, "DEF": 6, "MID": 5, "FWD": 4}
 CLEAN_SHEET_POINTS = {"GK": 4, "DEF": 4, "MID": 1, "FWD": 0}
 ASSIST_POINTS = 3
-LEAGUE_AVERAGE_GOALS = 1.45
 
 
 class SimulatedPointsModel(PointsModel):
@@ -88,7 +88,9 @@ class SimulatedPointsModel(PointsModel):
 
         team_for, team_against = self._team_rates(rows)
         g90, a90 = self.involvement.rates(data)
-        scale = team_for / LEAGUE_AVERAGE_GOALS  # known flaw: rates already embed a club
+        # Rates are quoted at an average club; this makes them the club's. Exact for the
+        # share model, a double count for rates read off a player's own history.
+        scale = team_for / LEAGUE_AVERAGE_GOALS
         goals = rng.poisson(np.clip(g90 * scale, 0, None)[None] * exposure)
         assists = rng.poisson(np.clip(a90 * scale, 0, None)[None] * exposure)
         conceded = rng.poisson(np.broadcast_to(team_against[None], (D, n)))

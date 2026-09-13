@@ -194,3 +194,47 @@ def test_dixon_coles_can_be_disabled(synthetic_matches):
     assert "rho" not in model.posterior
     probs = model.scoreline_probs(["Strong"], ["Weak"], max_goals=6)
     assert np.allclose(probs.sum(axis=(1, 2)), 1.0)
+
+
+def test_promoted_clubs_start_below_average(synthetic_matches):
+    """A club with no history is league-average by default; declared promoted, it starts below it.
+
+    Both ``Newbie`` and ``Promo`` have no results, so the only difference is the
+    promoted shift, and it must show in the attack and defence posteriors.
+    """
+    teams = ["Strong", "Average", "Weak", "Newbie", "Promo"]
+    model = DixonColesTeamModel(
+        teams=teams,
+        promoted=["Promo"],
+        inference=Inference(num_warmup=200, num_samples=200, num_chains=1),
+    ).fit(synthetic_matches)
+    strength = {str(s["team"]): s for s in model.team_strength()}
+    assert strength["Promo"]["attack"] < strength["Newbie"]["attack"] - 0.1
+    assert strength["Promo"]["defence"] < strength["Newbie"]["defence"] - 0.1
+    assert abs(strength["Newbie"]["attack"]) < 0.1
+
+
+def test_promoted_must_be_declared_teams(synthetic_matches):
+    """Naming a promoted club that is not in ``teams`` is an error, not a silent no-op."""
+    with pytest.raises(ValueError, match="promoted"):
+        DixonColesTeamModel(
+            teams=["Strong", "Average", "Weak"],
+            promoted=["Ghost"],
+            inference=Inference(num_warmup=10, num_samples=10, num_chains=1),
+        ).fit(synthetic_matches)
+
+
+def test_student_population_fits_and_round_trips(synthetic_matches):
+    """A Student-t population is a hyperparameter like any other: it fits and ``clone`` keeps it."""
+    model = DixonColesTeamModel(
+        population_df=4.0, inference=Inference(num_warmup=200, num_samples=200, num_chains=1)
+    ).fit(synthetic_matches)
+    assert model.clone().get_params()["population_df"] == 4.0
+    assert np.isfinite(model.score(synthetic_matches))
+
+
+@pytest.mark.parametrize("df", [2.0, 1.0, -3.0])
+def test_population_df_must_have_finite_variance(df):
+    """Two or fewer degrees of freedom has no variance to pool with; refuse it up front."""
+    with pytest.raises(ValueError, match="population_df"):
+        DixonColesTeamModel(population_df=df)

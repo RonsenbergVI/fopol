@@ -5,7 +5,7 @@ variants beneath it. Anything satisfying the base is interchangeable with any
 other variant of the same family, which is what makes comparing them meaningful.
 """
 
-from fopol.models.involvement import EmpiricalBayesInvolvement, InvolvementModel
+from fopol.models.involvement import EmpiricalBayesInvolvement, InvolvementModel, ShareInvolvement
 from fopol.models.minutes import MinutesModel, SequentialMinutesModel
 from fopol.models.points import PointsModel, SimulatedPointsModel
 from fopol.models.team import DixonColesTeamModel, TeamModel
@@ -17,6 +17,7 @@ __all__ = [
     "MinutesModel",
     "PointsModel",
     "SequentialMinutesModel",
+    "ShareInvolvement",
     "SimulatedPointsModel",
     "TeamModel",
 ]
