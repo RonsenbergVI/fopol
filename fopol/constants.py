@@ -27,3 +27,5 @@ CONCEDE_PENALTY_POSITIONS = ("GK", "DEF")
 # is quoted at: a player's per-90 rate "at an average club" times the club's
 # expected goals over this figure is his rate in a given fixture.
 LEAGUE_AVERAGE_GOALS = 1.45
+
+HAUL=10

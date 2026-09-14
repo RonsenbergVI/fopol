@@ -49,10 +49,6 @@ class Kind(StrEnum):
     RESULTS = "results"
     APPEARANCES = "appearances"
 
-
-# ------------------------------------------------------------------- fetching
-
-
 def cached_get(
     url: str, *, cache_dir: Path = CACHE_DIR, timeout: float = 60.0, refresh: bool = False
 ) -> str | None:
@@ -114,7 +110,6 @@ class Source(ABC):
     def _fetch(self, kind: Kind, season: str) -> Dataset:
         """Records for one kind and season, tagged with this source's name."""
 
-    # -------------------------------------------------------------- public API
 
     def get(self, kind: Kind | str, season: str) -> Dataset:
         kind = Kind(kind)

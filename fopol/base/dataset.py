@@ -95,8 +95,6 @@ class Dataset(Generic[T]):
         rows = frame.astype(object).where(pd.notna(frame), None).to_dict("records")
         return cls([record_type(**row) for row in rows], record_type=record_type, source=source)
 
-    # ----------------------------------------------------------- aggregation
-
     def aggregate(self) -> Dataset[Any]:
         """Collapse per-fixture records into their season type.
 

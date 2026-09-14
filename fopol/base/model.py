@@ -44,6 +44,7 @@ from typing import Any, ClassVar, Self
 import numpy as np
 from pydantic import BaseModel, ConfigDict
 
+from fopol.constants import HAUL
 from fopol.base.data import Data
 from fopol.base.dataset import Dataset
 from fopol.data.player import PlayerStat
@@ -406,9 +407,6 @@ class InvolvementModel(Model):
             lam = np.clip(rate * exposure, 1e-9, None)
             out += k * np.log(lam) - lam - lg(k + 1.0)
         return out
-
-
-HAUL = 10
 
 
 class PointsModel(Model):
